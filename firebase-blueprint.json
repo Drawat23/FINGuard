@@ -1,0 +1,430 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Root non-PII user account record acting as parent master gate for user-owned wealth subcollections.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the account owner."
+        },
+        "tier": {
+          "type": "string",
+          "enum": ["STANDARD", "PRO"],
+          "maxLength": 16,
+          "description": "Subscription tier label."
+        },
+        "upstoxConnected": {
+          "type": "boolean",
+          "description": "Whether broker OAuth is currently connected server-side."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last update timestamp."
+        }
+      },
+      "required": ["ownerId", "tier", "upstoxConnected", "createdAt", "updatedAt"]
+    },
+    "UserPrivateProfile": {
+      "title": "UserPrivateProfile",
+      "description": "Strictly isolated PII document for the authenticated user (email, display name, photo, VPA).",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the owner."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254,
+          "description": "Verified user email."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Investor display name."
+        },
+        "avatarUrl": {
+          "type": "string",
+          "maxLength": 512,
+          "description": "Optional Google profile photo URL."
+        },
+        "upiId": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Optional user UPI VPA."
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 24,
+          "description": "Optional contact phone number."
+        },
+        "city": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Optional city or state."
+        },
+        "occupation": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Optional occupation or role."
+        },
+        "dateOfBirth": {
+          "type": "string",
+          "maxLength": 16,
+          "description": "Optional ISO date of birth (YYYY-MM-DD)."
+        },
+        "bio": {
+          "type": "string",
+          "maxLength": 240,
+          "description": "Optional investor bio or wealth goal."
+        },
+        "riskProfile": {
+          "type": "string",
+          "enum": ["CONSERVATIVE", "BALANCED", "AGGRESSIVE"],
+          "maxLength": 20,
+          "description": "Investor risk appetite."
+        },
+        "taxRegime": {
+          "type": "string",
+          "enum": ["NEW", "OLD"],
+          "maxLength": 8,
+          "description": "Indian income tax regime."
+        },
+        "investmentHorizon": {
+          "type": "string",
+          "enum": ["SHORT_TERM", "MEDIUM_TERM", "LONG_TERM"],
+          "maxLength": 20,
+          "description": "Primary wealth compounding horizon."
+        },
+        "incomeBracket": {
+          "type": "string",
+          "enum": ["BELOW_10L", "10L_25L", "25L_50L", "ABOVE_50L"],
+          "maxLength": 20,
+          "description": "Annual income bracket."
+        },
+        "targetMonthlySipInr": {
+          "type": "number",
+          "description": "Target monthly SIP goal in INR."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["ownerId", "email", "displayName", "createdAt", "updatedAt"]
+    },
+    "TradeLot": {
+      "title": "TradeLot",
+      "description": "Real executed NSE/MF/ETF trade lot logged manually, imported via broker CSV, or placed via Upstox.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "symbol": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[A-Z0-9_.\\-&]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "assetType": {
+          "type": "string",
+          "enum": ["EQUITY", "ETF", "MF"],
+          "maxLength": 16
+        },
+        "side": {
+          "type": "string",
+          "enum": ["BUY", "SELL"],
+          "maxLength": 8
+        },
+        "quantity": {
+          "type": "number",
+          "description": "Executed share/unit quantity (> 0)."
+        },
+        "priceInr": {
+          "type": "number",
+          "description": "Actual execution price in INR (> 0)."
+        },
+        "tradeDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 32,
+          "description": "ISO execution date."
+        },
+        "source": {
+          "type": "string",
+          "enum": ["MANUAL", "CSV_IMPORT", "UPSTOX_LIVE"],
+          "maxLength": 24
+        },
+        "brokerOrderId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "symbol",
+        "name",
+        "assetType",
+        "side",
+        "quantity",
+        "priceInr",
+        "tradeDate",
+        "source",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "QuantStrategyRecord": {
+      "title": "QuantStrategyRecord",
+      "description": "User-backtested quantitative equity strategy evaluated against real historical NSE data.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "promptText": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "signalType": {
+          "type": "string",
+          "enum": ["MOMENTUM", "MEAN_REVERSION", "LOW_VOLATILITY", "DUAL_MA", "MULTI_FACTOR"],
+          "maxLength": 32
+        },
+        "universe": {
+          "type": "array",
+          "description": "NSE tickers in strategy universe (1 to 15 symbols)."
+        },
+        "rebalanceFrequency": {
+          "type": "string",
+          "enum": ["WEEKLY", "MONTHLY"],
+          "maxLength": 16
+        },
+        "vixHedgeEnabled": {
+          "type": "boolean"
+        },
+        "hedgeAsset": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "cagrPct": {
+          "type": "number"
+        },
+        "sharpeRatio": {
+          "type": "number"
+        },
+        "maxDrawdownPct": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "name",
+        "promptText",
+        "signalType",
+        "universe",
+        "rebalanceFrequency",
+        "vixHedgeEnabled",
+        "hedgeAsset",
+        "cagrPct",
+        "sharpeRatio",
+        "maxDrawdownPct",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CashflowEntry": {
+      "title": "CashflowEntry",
+      "description": "Real bank statement or UPI SMS cashflow record parsed locally for SIP volatility analysis.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 32
+        },
+        "merchant": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "category": {
+          "type": "string",
+          "enum": ["SALARY", "RENT", "GROCERY", "UTILITIES", "SIP", "TRANSFER", "DISCRETIONARY"],
+          "maxLength": 32
+        },
+        "amountInr": {
+          "type": "number"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["CREDIT", "DEBIT"],
+          "maxLength": 16
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["ownerId", "date", "merchant", "category", "amountInr", "type", "createdAt"]
+    },
+    "SipPlanRecord": {
+      "title": "SipPlanRecord",
+      "description": "Tracked Smart SIP plan & NPCI UPI payment schedule.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "strategyId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "strategyName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "amountInr": {
+          "type": "number"
+        },
+        "frequency": {
+          "type": "string",
+          "enum": ["WEEKLY", "MONTHLY"],
+          "maxLength": 16
+        },
+        "vpa": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 100
+        },
+        "status": {
+          "type": "string",
+          "enum": ["ACTIVE", "PAUSED", "CANCELLED"],
+          "maxLength": 16
+        },
+        "nextRunAt": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 32
+        },
+        "totalExecutedInr": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "strategyId",
+        "strategyName",
+        "amountInr",
+        "frequency",
+        "vpa",
+        "status",
+        "nextRunAt",
+        "totalExecutedInr",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "Owner-only non-PII user account root document used as Master Gate."
+    },
+    "/users/{userId}/private/{profileId}": {
+      "schema": { "$ref": "#/entities/UserPrivateProfile" },
+      "description": "Split PII storage accessible strictly by the verified account owner."
+    },
+    "/users/{userId}/trades/{tradeId}": {
+      "schema": { "$ref": "#/entities/TradeLot" },
+      "description": "Real executed trade lots owned by the user."
+    },
+    "/users/{userId}/strategies/{strategyId}": {
+      "schema": { "$ref": "#/entities/QuantStrategyRecord" },
+      "description": "Saved backtested quantitative strategies owned by the user."
+    },
+    "/users/{userId}/cashflow/{entryId}": {
+      "schema": { "$ref": "#/entities/CashflowEntry" },
+      "description": "Parsed real bank/UPI cashflow entries owned by the user."
+    },
+    "/users/{userId}/mandates/{mandateId}": {
+      "schema": { "$ref": "#/entities/SipPlanRecord" },
+      "description": "Tracked Smart SIP schedules owned by the user."
+    }
+  }
+}

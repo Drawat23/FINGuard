@@ -1,0 +1,422 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Pillar 4 / Phase 4: Global Safety Net (Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -----------------------------------------------------------------------
+    // Phase 3: Primitive Helpers
+    // -----------------------------------------------------------------------
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAccountOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function hasValidParentAccount(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+        get(/databases/$(database)/documents/users/$(userId)).data.ownerId == request.auth.uid;
+    }
+
+    // -----------------------------------------------------------------------
+    // Pillar 2: Entity Validation Blueprints (strict keys, types, sizes, regex)
+    // -----------------------------------------------------------------------
+    function isValidUserAccount(data, userId) {
+      return data.keys().hasAll(['ownerId', 'tier', 'upstoxConnected', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'tier', 'upstoxConnected', 'createdAt', 'updatedAt']) &&
+        isValidId(data.ownerId) &&
+        data.ownerId == userId &&
+        data.ownerId == request.auth.uid &&
+        data.tier in ['STANDARD', 'PRO'] &&
+        data.upstoxConnected is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateProfile(data, userId) {
+      return data.keys().hasAll(['ownerId', 'email', 'displayName', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'ownerId', 'email', 'displayName', 'avatarUrl', 'upiId',
+          'phone', 'city', 'occupation', 'dateOfBirth', 'bio',
+          'riskProfile', 'taxRegime', 'investmentHorizon', 'incomeBracket',
+          'targetMonthlySipInr', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.ownerId) &&
+        data.ownerId == userId &&
+        data.ownerId == request.auth.uid &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+        (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 512)) &&
+        (!('upiId' in data) || (data.upiId is string && data.upiId.size() <= 100)) &&
+        (!('phone' in data) || (data.phone is string && data.phone.size() <= 24)) &&
+        (!('city' in data) || (data.city is string && data.city.size() <= 80)) &&
+        (!('occupation' in data) || (data.occupation is string && data.occupation.size() <= 80)) &&
+        (!('dateOfBirth' in data) || (data.dateOfBirth is string && data.dateOfBirth.size() <= 16)) &&
+        (!('bio' in data) || (data.bio is string && data.bio.size() <= 240)) &&
+        (!('riskProfile' in data) || (data.riskProfile in ['CONSERVATIVE', 'BALANCED', 'AGGRESSIVE'])) &&
+        (!('taxRegime' in data) || (data.taxRegime in ['NEW', 'OLD'])) &&
+        (!('investmentHorizon' in data) || (data.investmentHorizon in ['SHORT_TERM', 'MEDIUM_TERM', 'LONG_TERM'])) &&
+        (!('incomeBracket' in data) || (data.incomeBracket in ['BELOW_10L', '10L_25L', '25L_50L', 'ABOVE_50L'])) &&
+        (!('targetMonthlySipInr' in data) || (data.targetMonthlySipInr is number && data.targetMonthlySipInr >= 0 && data.targetMonthlySipInr <= 10000000)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidTradeLot(data, userId) {
+      return data.keys().hasAll([
+          'ownerId', 'symbol', 'name', 'assetType', 'side',
+          'quantity', 'priceInr', 'tradeDate', 'source', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'ownerId', 'symbol', 'name', 'assetType', 'side',
+          'quantity', 'priceInr', 'tradeDate', 'source', 'brokerOrderId', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.ownerId) &&
+        data.ownerId == userId &&
+        data.ownerId == request.auth.uid &&
+        data.symbol is string && data.symbol.size() >= 1 && data.symbol.size() <= 32 && data.symbol.matches('^[A-Z0-9_.\\-&]+$') &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+        data.assetType in ['EQUITY', 'ETF', 'MF'] &&
+        data.side in ['BUY', 'SELL'] &&
+        data.quantity is number && data.quantity > 0 && data.quantity <= 100000000 &&
+        data.priceInr is number && data.priceInr > 0 && data.priceInr <= 100000000 &&
+        data.tradeDate is string && data.tradeDate.size() >= 10 && data.tradeDate.size() <= 32 &&
+        data.source in ['MANUAL', 'CSV_IMPORT', 'UPSTOX_LIVE'] &&
+        (!('brokerOrderId' in data) || (data.brokerOrderId is string && data.brokerOrderId.size() <= 64)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidQuantStrategyRecord(data, userId) {
+      return data.keys().hasAll([
+          'ownerId', 'name', 'promptText', 'signalType', 'universe',
+          'rebalanceFrequency', 'vixHedgeEnabled', 'hedgeAsset',
+          'cagrPct', 'sharpeRatio', 'maxDrawdownPct', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'ownerId', 'name', 'promptText', 'signalType', 'universe',
+          'rebalanceFrequency', 'vixHedgeEnabled', 'hedgeAsset',
+          'cagrPct', 'sharpeRatio', 'maxDrawdownPct', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.ownerId) &&
+        data.ownerId == userId &&
+        data.ownerId == request.auth.uid &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.promptText is string && data.promptText.size() >= 1 && data.promptText.size() <= 500 &&
+        data.signalType in ['MOMENTUM', 'MEAN_REVERSION', 'LOW_VOLATILITY', 'DUAL_MA', 'MULTI_FACTOR'] &&
+        data.universe is list && data.universe.size() >= 1 && data.universe.size() <= 15 &&
+        data.universe[0] is string && data.universe[0].size() >= 1 && data.universe[0].size() <= 32 &&
+        data.rebalanceFrequency in ['WEEKLY', 'MONTHLY'] &&
+        data.vixHedgeEnabled is bool &&
+        data.hedgeAsset is string && data.hedgeAsset.size() >= 1 && data.hedgeAsset.size() <= 32 &&
+        data.cagrPct is number &&
+        data.sharpeRatio is number &&
+        data.maxDrawdownPct is number &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCashflowEntry(data, userId) {
+      return data.keys().hasAll(['ownerId', 'date', 'merchant', 'category', 'amountInr', 'type', 'createdAt']) &&
+        data.keys().hasOnly(['ownerId', 'date', 'merchant', 'category', 'amountInr', 'type', 'createdAt']) &&
+        isValidId(data.ownerId) &&
+        data.ownerId == userId &&
+        data.ownerId == request.auth.uid &&
+        data.date is string && data.date.size() >= 8 && data.date.size() <= 32 &&
+        data.merchant is string && data.merchant.size() >= 1 && data.merchant.size() <= 120 &&
+        data.category in ['SALARY', 'RENT', 'GROCERY', 'UTILITIES', 'SIP', 'TRANSFER', 'DISCRETIONARY'] &&
+        data.amountInr is number && data.amountInr > 0 && data.amountInr <= 1000000000 &&
+        data.type in ['CREDIT', 'DEBIT'] &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidSipPlanRecord(data, userId) {
+      return data.keys().hasAll([
+          'ownerId', 'strategyId', 'strategyName', 'amountInr',
+          'frequency', 'vpa', 'status', 'nextRunAt', 'totalExecutedInr',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'ownerId', 'strategyId', 'strategyName', 'amountInr',
+          'frequency', 'vpa', 'status', 'nextRunAt', 'totalExecutedInr',
+          'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.ownerId) &&
+        data.ownerId == userId &&
+        data.ownerId == request.auth.uid &&
+        data.strategyId is string && data.strategyId.size() >= 1 && data.strategyId.size() <= 64 &&
+        data.strategyName is string && data.strategyName.size() >= 1 && data.strategyName.size() <= 100 &&
+        data.amountInr is number && data.amountInr >= 100 && data.amountInr <= 10000000 &&
+        data.frequency in ['WEEKLY', 'MONTHLY'] &&
+        data.vpa is string && data.vpa.size() >= 3 && data.vpa.size() <= 100 &&
+        data.status in ['ACTIVE', 'PAUSED', 'CANCELLED'] &&
+        data.nextRunAt is string && data.nextRunAt.size() >= 8 && data.nextRunAt.size() <= 32 &&
+        data.totalExecutedInr is number && data.totalExecutedInr >= 0 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // -----------------------------------------------------------------------
+    // User Account Root (Non-PII)
+    // -----------------------------------------------------------------------
+    match /users/{userId} {
+      allow get: if isAccountOwner(userId) &&
+        isValidId(userId) &&
+        (resource == null || !('ownerId' in existing()) || existing().ownerId == request.auth.uid);
+      allow list: if isAccountOwner(userId) && existing().ownerId == request.auth.uid;
+
+      allow create: if isVerifiedUser() &&
+        isAccountOwner(userId) &&
+        isValidId(userId) &&
+        isValidUserAccount(incoming(), userId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isAccountOwner(userId) &&
+        isValidId(userId) &&
+        isValidUserAccount(incoming(), userId) &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            'ownerId' in existing() &&
+            'createdAt' in existing() &&
+            existing().createdAt is timestamp &&
+            incoming().ownerId == existing().ownerId &&
+            incoming().createdAt == existing().createdAt &&
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly(['upstoxConnected', 'updatedAt']) ||
+              incoming().diff(existing()).affectedKeys().hasOnly(['tier', 'updatedAt'])
+            )
+          ) ||
+          (
+            !('ownerId' in existing()) &&
+            incoming().createdAt == request.time
+          )
+        );
+
+      allow delete: if false;
+
+      // Split PII Collection (strictly owner-only)
+      match /private/{profileId} {
+        allow get: if isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(profileId) &&
+          profileId == 'info' &&
+          (resource == null || (hasValidParentAccount(userId) && (!('ownerId' in existing()) || existing().ownerId == request.auth.uid)));
+
+        allow list: if false;
+
+        allow create: if isVerifiedUser() &&
+          isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(profileId) &&
+          profileId == 'info' &&
+          isValidUserPrivateProfile(incoming(), userId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          hasValidParentAccount(userId);
+
+        allow update: if isVerifiedUser() &&
+          isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(profileId) &&
+          profileId == 'info' &&
+          isValidUserPrivateProfile(incoming(), userId) &&
+          hasValidParentAccount(userId) &&
+          incoming().updatedAt == request.time &&
+          (
+            (
+              'ownerId' in existing() &&
+              'createdAt' in existing() &&
+              existing().createdAt is timestamp &&
+              incoming().ownerId == existing().ownerId &&
+              incoming().createdAt == existing().createdAt &&
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'displayName', 'avatarUrl', 'upiId', 'phone', 'city',
+                'occupation', 'dateOfBirth', 'bio', 'riskProfile',
+                'taxRegime', 'investmentHorizon', 'incomeBracket',
+                'targetMonthlySipInr', 'updatedAt'
+              ])
+            ) ||
+            (
+              !('ownerId' in existing()) &&
+              incoming().createdAt == request.time
+            )
+          );
+
+        allow delete: if false;
+      }
+
+      // Real Executed Trade Lots
+      match /trades/{tradeId} {
+        allow get: if isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(tradeId) &&
+          (resource == null || (hasValidParentAccount(userId) && existing().ownerId == request.auth.uid));
+
+        allow list: if isAccountOwner(userId) &&
+          isValidId(userId) &&
+          existing().ownerId == request.auth.uid;
+
+        allow create: if isVerifiedUser() &&
+          isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(tradeId) &&
+          isValidTradeLot(incoming(), userId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          hasValidParentAccount(userId);
+
+        allow update: if isVerifiedUser() &&
+          isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(tradeId) &&
+          isValidTradeLot(incoming(), userId) &&
+          hasValidParentAccount(userId) &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['quantity', 'priceInr', 'tradeDate', 'updatedAt']);
+
+        allow delete: if isVerifiedUser() &&
+          isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(tradeId) &&
+          hasValidParentAccount(userId) &&
+          existing().ownerId == request.auth.uid;
+      }
+
+      // Saved Quantitative Strategies
+      match /strategies/{strategyId} {
+        allow get: if isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(strategyId) &&
+          (resource == null || (hasValidParentAccount(userId) && existing().ownerId == request.auth.uid));
+
+        allow list: if isAccountOwner(userId) &&
+          isValidId(userId) &&
+          existing().ownerId == request.auth.uid;
+
+        allow create: if isVerifiedUser() &&
+          isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(strategyId) &&
+          isValidQuantStrategyRecord(incoming(), userId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          hasValidParentAccount(userId);
+
+        allow update: if isVerifiedUser() &&
+          isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(strategyId) &&
+          isValidQuantStrategyRecord(incoming(), userId) &&
+          hasValidParentAccount(userId) &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'cagrPct', 'sharpeRatio', 'maxDrawdownPct', 'updatedAt']);
+
+        allow delete: if isVerifiedUser() &&
+          isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(strategyId) &&
+          hasValidParentAccount(userId) &&
+          existing().ownerId == request.auth.uid;
+      }
+
+      // Parsed Real Cashflow Entries
+      match /cashflow/{entryId} {
+        allow get: if isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(entryId) &&
+          (resource == null || (hasValidParentAccount(userId) && existing().ownerId == request.auth.uid));
+
+        allow list: if isAccountOwner(userId) &&
+          isValidId(userId) &&
+          existing().ownerId == request.auth.uid;
+
+        allow create: if isVerifiedUser() &&
+          isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(entryId) &&
+          isValidCashflowEntry(incoming(), userId) &&
+          incoming().createdAt == request.time &&
+          hasValidParentAccount(userId);
+
+        allow update: if false;
+
+        allow delete: if isVerifiedUser() &&
+          isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(entryId) &&
+          hasValidParentAccount(userId) &&
+          existing().ownerId == request.auth.uid;
+      }
+
+      // Tracked Smart SIP Schedules (with Terminal State Locking)
+      match /mandates/{mandateId} {
+        allow get: if isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(mandateId) &&
+          (resource == null || (hasValidParentAccount(userId) && existing().ownerId == request.auth.uid));
+
+        allow list: if isAccountOwner(userId) &&
+          isValidId(userId) &&
+          existing().ownerId == request.auth.uid;
+
+        allow create: if isVerifiedUser() &&
+          isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(mandateId) &&
+          isValidSipPlanRecord(incoming(), userId) &&
+          incoming().status == 'ACTIVE' &&
+          incoming().totalExecutedInr == 0 &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          hasValidParentAccount(userId);
+
+        allow update: if isVerifiedUser() &&
+          isAccountOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(mandateId) &&
+          isValidSipPlanRecord(incoming(), userId) &&
+          hasValidParentAccount(userId) &&
+          existing().status != 'CANCELLED' &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          (
+            (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+              incoming().status in ['ACTIVE', 'PAUSED', 'CANCELLED']) ||
+            (incoming().diff(existing()).affectedKeys().hasOnly(['totalExecutedInr', 'nextRunAt', 'updatedAt']) &&
+              incoming().totalExecutedInr >= existing().totalExecutedInr)
+          );
+
+        allow delete: if false;
+      }
+    }
+  }
+}
